@@ -1,0 +1,431 @@
+<!DOCTYPE html>  
+<html lang="en">  
+<head>  
+<meta charset="UTF-8">  
+<meta name="viewport" content="width=device-width, initial-scale=1.0">  
+<title>AK IPTV FULL PRO</title>  
+
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>  
+
+<style>  
+*{  
+margin:0;  
+padding:0;  
+box-sizing:border-box;  
+font-family:Segoe UI;  
+}  
+
+html,body{  
+width:100%;  
+height:100%;  
+overflow-x:hidden;  
+background:#0b1220;  
+color:white;  
+}  
+
+header{  
+width:100%;  
+padding:12px;  
+text-align:center;  
+background:linear-gradient(90deg,#2563eb,#7c3aed);  
+font-weight:bold;  
+}  
+
+.player-wrap{  
+width:100%;  
+position:relative;  
+background:black;  
+}  
+
+video{  
+width:100%;  
+height:380px;  
+display:block;  
+object-fit:contain;  
+}  
+
+.live{  
+position:absolute;  
+top:10px;  
+left:10px;  
+background:red;  
+padding:4px 10px;  
+border-radius:6px;  
+font-size:12px;  
+animation:blink 1s infinite;  
+}  
+@keyframes blink{50%{opacity:0.3;}}  
+
+.quality{  
+position:absolute;  
+top:10px;  
+right:10px;  
+background:rgba(0,0,0,0.6);  
+padding:4px 10px;  
+border-radius:6px;  
+font-size:12px;  
+}  
+
+.controls{  
+width:100%;  
+display:flex;  
+flex-wrap:wrap;  
+align-items:center;  
+gap:10px;  
+padding:10px;  
+background:#111827;  
+}  
+
+.controls button, .controls select{  
+background:#1f2937;  
+border:none;  
+color:white;  
+padding:6px 10px;  
+border-radius:6px;  
+cursor:pointer;  
+}  
+
+.controls input{  
+width:90px;  
+}  
+
+.now-playing{  
+width:100%;  
+padding:10px;  
+background:#0f172a;  
+border-top:1px solid #1e293b;  
+font-size:14px;  
+color:#38bdf8;  
+}  
+
+/* ⭐ RECOMMENDATION */  
+.recommend-title{  
+padding:10px;  
+font-weight:bold;  
+color:#facc15;  
+}  
+
+.row{  
+width:100%;  
+padding:10px 0;  
+}  
+
+.row-title{  
+padding:0 10px;  
+font-weight:bold;  
+margin:10px 0;  
+}  
+
+.row-items{  
+width:100%;  
+display:flex;  
+flex-wrap:nowrap;  
+overflow-x:auto;  
+gap:10px;  
+padding:0 10px;  
+}  
+
+.card{  
+min-width:140px;  
+background:#1e293b;  
+padding:10px;  
+border-radius:12px;  
+text-align:center;  
+cursor:pointer;  
+transition:0.2s;  
+flex:0 0 auto;  
+}  
+
+.card:hover{  
+transform:scale(1.05);  
+background:#2563eb;  
+}  
+
+.card img{  
+width:60px;  
+height:60px;  
+background:white;  
+border-radius:10px;  
+object-fit:contain;  
+padding:5px;  
+}  
+
+.preview{  
+position:fixed;  
+display:none;  
+width:200px;  
+background:#111827;  
+border-radius:12px;  
+overflow:hidden;  
+z-index:9999;  
+pointer-events:none;  
+}  
+
+.preview img{  
+width:100%;  
+height:110px;  
+object-fit:contain;  
+background:white;  
+}  
+
+.preview div{  
+padding:8px;  
+text-align:center;  
+}  
+
+@media(max-width:768px){  
+video{height:230px;}  
+.controls input{width:70px;}  
+}  
+
+</style>  
+</head>  
+
+<body>  
+
+<header>📺 AK IPTV FULL PRO</header>  
+
+<div class="player-wrap">  
+<div class="live">● LIVE</div>  
+<div class="quality" id="quality">AUTO</div>  
+<video id="video" controls></video>  
+</div>  
+
+<!-- CONTROLS -->  
+<div class="controls">  
+
+<button onclick="prevChannel()">⏮ Prev</button>  
+<button onclick="nextChannel()">⏭ Next</button>  
+
+🔊 <input type="range" min="0" max="1" step="0.1" oninput="video.volume=this.value">  
+
+🌞 <input type="range" min="0.5" max="2" step="0.1" value="1" oninput="setBrightness(this.value)">  
+
+<button onclick="toggleMute()">🔇</button>  
+<button onclick="toggleFullScreen()">⛶</button>  
+
+<select onchange="setSpeed(this.value)">  
+<option value="1" selected>1x</option>  
+<option value="0.75">0.75x</option>  
+<option value="1.25">1.25x</option>  
+<option value="1.5">1.5x</option>  
+</select>  
+
+</div>  
+
+<div class="now-playing" id="nowPlaying">📺 Now Playing: -</div>  
+
+<!-- ⭐ RECOMMENDATION SECTION (RESTORED) -->  
+<div class="row">  
+<div class="recommend-title">🔥 Recommended For You</div>  
+<div class="row-items" id="recommendBox"></div>  
+</div>  
+
+<div id="rows"></div>  
+
+<div id="preview" class="preview">  
+<img id="pimg">  
+<div id="pname"></div>  
+</div>  
+
+<script>  
+
+const URL="https://raw.githubusercontent.com/DrSujonPaul/Sujon/6dc6a1d4eaa20a9239ae27d8e0f00182b60eeb47/iptv";  
+
+let channels=[];  
+let hls;  
+let video=document.getElementById("video");  
+let currentIndex=0;  
+let retryCount=0;  
+const MAX_RETRY=3;  
+
+fetch(URL).then(r=>r.text()).then(parse);  
+
+function parse(t){  
+let lines=t.split("\n");  
+
+for(let i=0;i<lines.length;i++){  
+if(lines[i].startsWith("#EXTINF")){  
+let name=lines[i].split(",").pop().trim();  
+let url=lines[i+1]?.trim();  
+
+let logo=lines[i].match(/tvg-logo="(.*?)"/);  
+logo=logo?logo[1]:"https://via.placeholder.com/60";  
+
+let group=lines[i].match(/group-title="(.*?)"/);  
+group=group?group[1]:"other";  
+
+if(url)channels.push({name,url,logo,group});  
+}  
+}  
+
+render();  
+}  
+
+function render(){  
+let box=document.getElementById("rows");  
+box.innerHTML="";  
+
+let groups={};  
+
+channels.forEach(c=>{  
+if(!groups[c.group])groups[c.group]=[];  
+groups[c.group].push(c);  
+});  
+
+for(let g in groups){  
+let row=document.createElement("div");  
+row.className="row";  
+
+row.innerHTML=`  
+<div class="row-title">${g.toUpperCase()}</div>  
+<div class="row-items"></div>`;  
+
+box.appendChild(row);  
+
+let container=row.querySelector(".row-items");  
+
+groups[g].forEach(c=>{  
+let index=channels.indexOf(c);  
+
+let div=document.createElement("div");  
+div.className="card";  
+
+div.innerHTML=`  
+<img src="${c.logo}">  
+<div style="font-size:12px">${c.name}</div>`;  
+
+div.onclick=()=>play(index);  
+
+container.appendChild(div);  
+});  
+}  
+}  
+
+/* ⭐ RECOMMENDATION ENGINE */  
+function renderRecommendations(i){  
+let box=document.getElementById("recommendBox");  
+box.innerHTML="";  
+
+let current=channels[i];  
+
+let sameGroup=channels.filter(c=>c.group===current.group && c!==current);  
+let random=channels.slice().sort(()=>0.5-Math.random());  
+
+let rec=[...sameGroup,...random].slice(0,8);  
+
+rec.forEach(c=>{  
+let index=channels.indexOf(c);  
+
+let div=document.createElement("div");  
+div.className="card";  
+
+div.innerHTML=`  
+<img src="${c.logo}">  
+<div style="font-size:12px">${c.name}</div>`;  
+
+div.onclick=()=>play(index);  
+
+box.appendChild(div);  
+});  
+}  
+
+/* ================= PLAY + AUTO RETRY ================= */  
+
+function play(i){  
+currentIndex=i;  
+retryCount=0;  
+
+let c=channels[i];  
+
+document.getElementById("nowPlaying").innerText=  
+"📺 Now Playing: " + c.name;  
+
+renderRecommendations(i);  
+
+if(hls)hls.destroy();  
+
+loadStream(c.url);  
+}  
+
+function loadStream(url){  
+
+hls=new Hls({  
+enableWorker:true,  
+lowLatencyMode:true  
+});  
+
+hls.loadSource(url);  
+hls.attachMedia(video);  
+
+hls.on(Hls.Events.MANIFEST_PARSED,()=>{  
+video.play();  
+});  
+
+hls.on(Hls.Events.ERROR,(event,data)=>{  
+
+if(data.fatal){  
+retryCount++;  
+
+if(retryCount<=MAX_RETRY){  
+if(data.type==="networkError"){  
+hls.startLoad();  
+}  
+else if(data.type==="mediaError"){  
+hls.recoverMediaError();  
+}  
+else{  
+reloadStream();  
+}  
+}else{  
+reloadStream();  
+}  
+}  
+
+});  
+
+video.onerror=()=>reloadStream();  
+}  
+
+function reloadStream(){  
+setTimeout(()=>{  
+if(channels[currentIndex]){  
+loadStream(channels[currentIndex].url);  
+}  
+},2000);  
+}  
+
+/* ================= CONTROLS ================= */  
+
+function nextChannel(){  
+currentIndex=(currentIndex+1)%channels.length;  
+play(currentIndex);  
+}  
+
+function prevChannel(){  
+currentIndex=(currentIndex-1+channels.length)%channels.length;  
+play(currentIndex);  
+}  
+
+function setBrightness(v){  
+video.style.filter=`brightness(${v})`;  
+}  
+
+function toggleMute(){  
+video.muted=!video.muted;  
+}  
+
+function toggleFullScreen(){  
+if(video.requestFullscreen){  
+video.requestFullscreen();  
+}  
+}  
+
+function setSpeed(v){  
+video.playbackRate=parseFloat(v);  
+}  
+
+</script>  
+
+</body>  
+</html>
